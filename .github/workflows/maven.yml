@@ -18,8 +18,45 @@ jobs:
 
       - run: mvn --batch-mode --update-snapshots verify
 
-      - run: mkdir staging && cp target/*.jar staging
+      - run: mkdir staging && cp target/*.jar staging/
       - uses: actions/upload-artifact@v4
         with:
           name: Package
-          path: staging
+          path: staging/*.jar  # Ensure it points to the specific JAR file
+
+  container:
+    needs: build  # Ensure this job runs after 'build'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download the JAR file
+        uses: actions/download-artifact@v4
+        with:
+          name: Package
+          path: target
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.TOKEN }}
+
+      - name: lowercase github.repository
+        run: |
+          echo "IMAGE_NAME=`echo ${{github.repository}} | tr '[:upper:]' '[:lower:]'`" >>${GITHUB_ENV}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          push: true
+          tags: ghcr.io/${{ env.IMAGE_NAME }}/wwi23b3:latest
+          file: ./Dockerfile
+          context: .
+
+      - name: Verify Docker image
+        run: docker images ghcr.io/${{ env.IMAGE_NAME }}/wwi23b3:latest
